@@ -9,4 +9,4 @@ razorpay
 twilio
 loguru
 pyyaml
-cryptography
+cryptography<44
