@@ -1,7 +1,7 @@
 import os
 import json
 import logging
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, Query
 import requests
 from typing import Optional
 
@@ -24,9 +24,9 @@ SYSTEM_PROMPT = """You are a 100+ years experienced Vedic astrologer. You speak 
 
 @app.get("/webhook")
 async def verify_webhook(
-    hub_mode: Optional[str] = None,
-    hub_challenge: Optional[str] = None,
-    hub_verify_token: Optional[str] = None
+    hub_mode: Optional[str] = Query(None, alias="hub.mode"),
+    hub_challenge: Optional[str] = Query(None, alias="hub.challenge"),
+    hub_verify_token: Optional[str] = Query(None, alias="hub.verify_token")
 ):
     if hub_mode == "subscribe" and hub_verify_token == VERIFY_TOKEN:
         logger.info("✅ Webhook verified!")

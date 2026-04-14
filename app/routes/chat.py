@@ -6,7 +6,7 @@ WhatsApp Cloud API webhook and chat endpoint with full conversation logic.
 import time
 import uuid
 from typing import Optional
-from fastapi import APIRouter, Request, Response, HTTPException
+from fastapi import APIRouter, Request, Response, HTTPException, Query
 from fastapi.responses import JSONResponse
 from loguru import logger
 
@@ -26,19 +26,19 @@ router = APIRouter(prefix="/chat", tags=["Chat"])
 
 @router.get("/webhook/whatsapp")
 async def whatsapp_webhook_verify(
-    hub_mode: Optional[str] = None,
-    hub_token: Optional[str] = None,
-    hub_challenge: Optional[str] = None
+    hub_mode: Optional[str] = Query(None, alias="hub.mode"),
+    hub_verify_token: Optional[str] = Query(None, alias="hub.verify_token"),
+    hub_challenge: Optional[str] = Query(None, alias="hub.challenge")
 ):
     """
     WhatsApp Cloud API webhook verification endpoint.
     GET request for verification.
     """
-    logger.info(f"WhatsApp webhook verification: mode={hub_mode}, token={hub_token}")
+    logger.info(f"WhatsApp webhook verification: mode={hub_mode}, token={hub_verify_token}")
 
     if (
         hub_mode == "subscribe"
-        and hub_token == settings.WHATSAPP_VERIFY_TOKEN
+        and hub_verify_token == settings.WHATSAPP_VERIFY_TOKEN
     ):
         logger.info("WhatsApp webhook verified successfully")
         return int(hub_challenge) if hub_challenge else 200
