@@ -111,6 +111,8 @@ async def root():
     }
 
 
+from fastapi.responses import PlainTextResponse
+
 @app.get("/webhook")
 async def verify_webhook_top_level(
     hub_mode: Optional[str] = Query(None, alias="hub.mode"),
@@ -118,15 +120,20 @@ async def verify_webhook_top_level(
     hub_verify_token: Optional[str] = Query(None, alias="hub.verify_token")
 ):
     """Fallback top-level webhook verification for WhatsApp"""
+    import os
     from app.config import settings
-    logger.info(f"Top-level Webhook verification: mode={hub_mode}, token={hub_verify_token}")
+    
+    # Check both settings and os.environ directly as a fallback
+    verify_token = settings.WHATSAPP_VERIFY_TOKEN or os.getenv("WHATSAPP_VERIFY_TOKEN", "myverify123")
+    
+    logger.info(f"Top-level Webhook verification: mode={hub_mode}, token={hub_verify_token}, expected_token={verify_token}")
 
     if (
         hub_mode == "subscribe"
-        and hub_verify_token == settings.WHATSAPP_VERIFY_TOKEN
+        and hub_verify_token == verify_token
     ):
         logger.info("✅ Top-level webhook verified successfully")
-        return int(hub_challenge) if hub_challenge else 200
+        return PlainTextResponse(content=hub_challenge)
 
     raise HTTPException(status_code=403, detail="Forbidden")
 
