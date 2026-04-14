@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python *)",
+      "Bash(uvicorn *)",
+      "Bash(echo.)"
+    ]
+  },
+  "$version": 3
+}

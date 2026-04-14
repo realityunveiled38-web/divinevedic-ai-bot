@@ -1,17 +1,18 @@
 """
-Qwen API Service - DivineVedic AI Bot
-Handles all interactions with Qwen via OpenRouter API.
+Qwen Service - DivineVedic AI Bot
+Handles Qwen AI integration via OpenRouter API with Vedic Astrology system prompt.
 """
 
 import httpx
-from typing import List, Dict, Any, Optional
+import asyncio
+from typing import Dict, Any
 from loguru import logger
 
 from app.config import settings
 
 
 class QwenService:
-    """Service for Qwen AI API operations via OpenRouter"""
+    """Service for Qwen AI via OpenRouter API"""
 
     def __init__(self):
         self.api_url = settings.OPENROUTER_API_URL
@@ -19,134 +20,109 @@ class QwenService:
         self.model = settings.OPENROUTER_MODEL
         self.max_tokens = settings.OPENROUTER_MAX_TOKENS
         self.temperature = settings.OPENROUTER_TEMPERATURE
-        self._initialized = False
-
-    def initialize(self) -> bool:
-        """Initialize Qwen service"""
-        if not self.api_key:
-            logger.warning("OpenRouter API key not set - Qwen service will not work")
-            return False
-
-        self._initialized = True
-        logger.info("Qwen service initialized successfully")
-        return True
-
-    async def get_completion(
-        self,
-        messages: List[Dict[str, str]],
-        max_tokens: Optional[int] = None,
-        temperature: Optional[float] = None,
-        system_prompt: Optional[str] = None
-    ) -> Optional[str]:
-        """
-        Get completion from Qwen API.
-        
-        Args:
-            messages: List of message dicts with 'role' and 'content'
-            max_tokens: Override max tokens (optional)
-            temperature: Override temperature (optional)
-            system_prompt: System prompt to prepend (optional)
-            
-        Returns:
-            Response text or None on error
-        """
-        try:
-            if not self._initialized:
-                logger.error("Qwen service not initialized")
-                return None
-
-            # Build messages list
-            final_messages = messages.copy()
-            
-            # Add system prompt if provided
-            if system_prompt:
-                final_messages.insert(0, {"role": "system", "content": system_prompt})
-
-            # Prepare request payload
-            payload = {
-                "model": self.model,
-                "messages": final_messages,
-                "max_tokens": max_tokens or self.max_tokens,
-                "temperature": temperature or self.temperature
-            }
-
-            headers = {
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-                "HTTP-Referer": "https://divinevedic.ai",  # Required by OpenRouter
-                "X-Title": "DivineVedic AI Bot"  # Required by OpenRouter
-            }
-
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                response = await client.post(
-                    self.api_url,
-                    json=payload,
-                    headers=headers
-                )
-                response.raise_for_status()
-                result = response.json()
-
-                # Extract response text
-                response_text = result["choices"][0]["message"]["content"]
-                
-                if not response_text:
-                    logger.warning("Empty response from Qwen API")
-                    return None
-
-                logger.info(f"Qwen API responded: {len(response_text)} chars")
-                return response_text
-
-        except httpx.HTTPStatusError as e:
-            logger.error(f"HTTP error from Qwen API: {e.response.status_code} - {e.response.text}")
-            return None
-        except httpx.RequestError as e:
-            logger.error(f"Request error from Qwen API: {e}")
-            return None
-        except KeyError as e:
-            logger.error(f"Unexpected response format from Qwen API: {e}")
-            return None
-        except Exception as e:
-            logger.error(f"Unexpected error in Qwen API: {e}")
-            return None
+        self._initialized = bool(self.api_key)
 
     async def get_completion_with_retry(
-        self,
-        messages: List[Dict[str, str]],
-        max_tokens: Optional[int] = None,
-        temperature: Optional[float] = None,
-        system_prompt: Optional[str] = None,
-        retries: int = 2
-    ) -> Optional[str]:
+        self, 
+        messages: list, 
+        max_tokens: int = None, 
+        temperature: float = None,
+        system_prompt: str = None
+    ) -> str:
         """
-        Get completion with automatic retry on failure.
-        
-        Args:
-            messages: List of message dicts
-            max_tokens: Override max tokens
-            temperature: Override temperature
-            system_prompt: System prompt
-            retries: Number of retry attempts
-            
-        Returns:
-            Response text or None after all retries
+        Get Qwen completion with retry logic (matches agent interface).
         """
-        for attempt in range(retries + 1):
-            response = await self.get_completion(
-                messages=messages,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                system_prompt=system_prompt
-            )
-            if response is not None:
-                return response
-            
-            if attempt < retries:
-                logger.warning(f"Retry attempt {attempt + 1}/{retries} for Qwen API")
-                import asyncio
+        if not self._initialized:
+            logger.error("Qwen service not initialized - missing API key")
+            return "❌ AI service अस्थायी रूप से unavailable है। कृपया कुछ देर बाद try करें।"
+
+        # Use provided params or defaults
+        max_tokens = max_tokens or self.max_tokens
+        temperature = temperature or self.temperature
+
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "max_tokens": max_tokens,
+            "temperature": temperature
+        }
+
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://divinevedic-ai-bot.railway.app",
+            "X-Title": "DivineVedic AI Bot"
+        }
+
+        for attempt in range(3):  # Retry up to 3 times
+            try:
+                async with httpx.AsyncClient(timeout=60.0) as client:
+                    response = await client.post(self.api_url, json=payload, headers=headers)
+                    response.raise_for_status()
+
+                    data = response.json()
+                    ai_response = data["choices"][0]["message"]["content"].strip()
+                    logger.info(f"Qwen response generated (attempt {attempt+1}): {len(ai_response)} chars")
+                    return ai_response
+
+            except Exception as e:
+                logger.warning(f"Qwen attempt {attempt+1} failed: {e}")
+                if attempt == 2:  # Last attempt
+                    break
                 await asyncio.sleep(2 ** attempt)  # Exponential backoff
 
-        logger.error(f"All {retries + 1} attempts failed for Qwen API")
-        return None
+        return "⏳ AI service busy। कृपया 1 मिनट बाद पुनः प्रयास करें।"
+
+        system_prompt = """You are a 100+ years experienced Vedic astrologer. You speak in Hinglish. 
+You give deep and accurate predictions based on astrology and numerology. 
+Always structure your answers in: Past, Present, Future, and Remedies. Be confident and detailed."""
+
+        payload: Dict[str, Any] = {
+            "model": self.model,
+            "messages": [
+                {
+                    "role": "system", 
+                    "content": system_prompt
+                },
+                {
+                    "role": "user",
+                    "content": user_message
+                }
+            ],
+            "max_tokens": self.max_tokens,
+            "temperature": self.temperature
+        }
+
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://divinevedic-ai-bot.railway.app",  # Required by OpenRouter
+            "X-Title": "DivineVedic AI Bot"  # Required by OpenRouter
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(self.api_url, json=payload, headers=headers)
+                response.raise_for_status()
+
+                data = response.json()
+                ai_response = data["choices"][0]["message"]["content"].strip()
+                
+                logger.info(f"Qwen response generated successfully (length: {len(ai_response)})")
+                return ai_response
+
+        except httpx.TimeoutException:
+            logger.error("Qwen API timeout")
+            return "⏳ AI सोच रहा है... कृपया 1 मिनट wait करें।"
+        except httpx.HTTPStatusError as e:
+            logger.error(f"Qwen API HTTP error: {e.response.status_code}")
+            return "❌ Server error। कृपया retry करें।"
+        except KeyError as e:
+            logger.error(f"Invalid Qwen response format: {e}")
+            return "❌ AI response format error। Support को contact करें।"
+        except Exception as e:
+            logger.error(f"Unexpected Qwen error: {e}")
+            return "❌ अज्ञात error। कृपया पुनः प्रयास करें। 🙏"
 
 
 # Singleton instance
