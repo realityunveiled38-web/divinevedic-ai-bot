@@ -5,8 +5,9 @@ Production-ready WhatsApp Bot with Vedic Astrology, Numerology, and Subscription
 
 import os
 import time
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
+from typing import Optional
 from loguru import logger
 import sys
 
@@ -109,6 +110,31 @@ async def root():
         }
     }
 
+
+@app.get("/webhook")
+async def verify_webhook_top_level(
+    hub_mode: Optional[str] = Query(None, alias="hub.mode"),
+    hub_challenge: Optional[str] = Query(None, alias="hub.challenge"),
+    hub_verify_token: Optional[str] = Query(None, alias="hub.verify_token")
+):
+    """Fallback top-level webhook verification for WhatsApp"""
+    from app.config import settings
+    logger.info(f"Top-level Webhook verification: mode={hub_mode}, token={hub_verify_token}")
+
+    if (
+        hub_mode == "subscribe"
+        and hub_verify_token == settings.WHATSAPP_VERIFY_TOKEN
+    ):
+        logger.info("✅ Top-level webhook verified successfully")
+        return int(hub_challenge) if hub_challenge else 200
+
+    raise HTTPException(status_code=403, detail="Forbidden")
+
+@app.post("/webhook")
+async def receive_webhook_top_level(request: Request):
+    """Fallback top-level webhook receiver for WhatsApp"""
+    from app.routes.chat import whatsapp_webhook_event
+    return await whatsapp_webhook_event(request)
 
 @app.get("/health")
 async def health_check():
