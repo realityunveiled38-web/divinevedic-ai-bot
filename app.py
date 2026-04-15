@@ -48,13 +48,19 @@ async def receive_message(request: Request):
             return {"status": "ok"}
 
         change = entry["changes"][0]
-        if "value" not in change or "messages" not in change["value"]:
+        if "value" not in change:
             return {"status": "ok"}
 
-        messages = change["value"]["messages"]
-        if not messages:
+        value = change["value"]
+        
+        # Handle status updates (read, delivered, sent)
+        if "statuses" in value:
+            return {"status": "ok"}
+            
+        if "messages" not in value or not value["messages"]:
             return {"status": "ok"}
 
+        messages = value["messages"]
         message = messages[0]
         sender_phone = message.get("from")
 
